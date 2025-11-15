@@ -1,0 +1,7 @@
+{
+  "type": "module",
+  "dependencies": {
+    "@liamcottle/meshcore.js": "^1.4.4",
+    "struct": "^0.0.12"
+  }
+}
