@@ -2,6 +2,8 @@ import { Constants } from "./constants.js";
 
 export class Packet {
     constructor(
+        destination,
+        source,
         session,
         totalChunks,
         chunkIndex,
@@ -9,6 +11,8 @@ export class Packet {
         payloadLength,
         payload
     ) {
+        this.destination = destination;
+        this.source = source;
         this.session = session;
         this.totalChunks = totalChunks;
         this.chunkIndex = chunkIndex;
@@ -21,6 +25,8 @@ export class Packet {
         return new Uint8Array([
             ...Constants.Magic,
             Constants.Version,
+            this.destination,
+            this.source,
             this.session,
             this.totalChunks,
             this.chunkIndex,
@@ -34,12 +40,14 @@ export class Packet {
         // Skip Magic (2 bytes) and Version (1 byte)
 
         return new Packet(
-            raw[3], // Session
-            raw[4], // totalChunks
-            raw[5], // chunkIndex
-            raw[6], // payloadType
-            raw[7], // payloadLength
-            raw.slice(8) // payload
+            raw[3], // Destination
+            raw[4], // Source
+            raw[5], // Session
+            raw[6], // totalChunks
+            raw[7], // chunkIndex
+            raw[8], // payloadType
+            raw[9], // payloadLength
+            raw.slice(10) // payload
         )
     }
 }

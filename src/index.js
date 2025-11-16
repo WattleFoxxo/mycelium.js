@@ -12,19 +12,22 @@ class Mycelium extends EventEmitter {
         this.sessions = new Map();
 
         this.device.on(Constants.MeshcorePushCodes.LogRxData, (data) => this._onRawCustom(data));
+        this.device.on(Constants.Events.Connected, () => this._onConnected());
+        this.device.on(Constants.Events.Disconnected, () => this._onDisconnected());
     }
 
-    sendMessage(message) {
+    async sendMessage(destination, message) {
         const payload = new Uint8Array(new TextEncoder("utf-8").encode(message));
 
         this._sendMyceliumMessage(new Message(
+            destination,
             Constants.PayloadType.Message,
             payload.length,
             payload
         ));
     }
 
-    sendFile(fileName, file) {
+    async sendFile(destination, fileName, file) {
         const name = new TextEncoder("utf-8").encode(fileName);
 
         const payload = new Uint8Array([
@@ -34,10 +37,31 @@ class Mycelium extends EventEmitter {
         ]);
 
         this._sendMyceliumMessage(new Message(
+            destination,
             Constants.PayloadType.File,
             payload.length,
             payload
         ));
+    }
+
+    async _onConnected() {
+        this.selfInfo = await this.device.getSelfInfo();
+
+        this.emit(Constants.Events.Connected);
+    }
+
+    async _onDisconnected() {
+        this.emit(Constants.Events.Disconnected);
+    }
+
+    async _resolvePath(publicKey) {
+        if (publicKey == Constants.Path.ZeroHop) return [];
+
+        const contact = await this.device.findContactByPublicKeyPrefix(publicKey);
+
+        if (contact.outPathLen == -1) return [];
+
+        return contact.outPath;
     }
 
     _onMyceliumMessage(message) {
@@ -45,7 +69,7 @@ class Mycelium extends EventEmitter {
             case Constants.PayloadType.Message:
                 const text = new TextDecoder("utf-8").decode(message.payload);
 
-                this.emit(Constants.MessageEvent.Message, {
+                this.emit(Constants.Events.Message, {
                     message: text
                 });
                 break;
@@ -57,7 +81,7 @@ class Mycelium extends EventEmitter {
                 );
                 const file = message.payload.slice(fileNameLength + 1);
 
-                this.emit(Constants.MessageEvent.File, {
+                this.emit(Constants.Events.File, {
                     fileName: fileName,
                     file: file
                 });
@@ -65,7 +89,7 @@ class Mycelium extends EventEmitter {
         }
     }
 
-    _sendMyceliumMessage(message) {
+    async _sendMyceliumMessage(message) {
         const totalChunks = Math.ceil(message.payloadLength / Constants.ChunkSize);
 
         let session = new Session(
@@ -80,6 +104,8 @@ class Mycelium extends EventEmitter {
         let chunk = session.getNextChunk();
 
         let packet = new Packet(
+            message.destination[0],
+            this.selfInfo.publicKey[0],
             session.id,
             session.totalChunks,
             session.currentChunk,
@@ -88,24 +114,36 @@ class Mycelium extends EventEmitter {
             chunk
         );
 
-        this.device.sendCommandSendRawData([], packet.toUint8Array());
+        const path = await this._resolvePath(message.destination);
+        this.device.sendCommandSendRawData(path, packet.toUint8Array());
     }
 
     async _onRawCustom(data) {
         // Filter out non RawCustom packets
+        
         if (data.raw[0] != 0x3e) return;
 
-        const rawPacket = data.raw.slice(2);
-
+        const pathLength = data.raw[1];
+        const rawPacket = data.raw.slice(2 + pathLength);
+        
         // Filter out non Mcelium packets
         if (!rawPacket.slice(0, 2).every(
-            (v, i) => v === [0x4D, 0x50][i])
-        ) return false;
+            (v, i) => v === Constants.Magic[i])
+        ) return;
         
-        const packet = Packet.fromUint8Array(rawPacket);
+        // Filter incompatible Mcelium packets
+        if (rawPacket[2] != Constants.Version) return;
 
+        const packet = Packet.fromUint8Array(rawPacket);
+        
+        // Filter Mcelium packets that are not for us
+        if (packet.destination != this.selfInfo.publicKey[0] && packet.destination != Constants.Path.ZeroHop[0]) return;
+        
         if (packet.totalChunks == 1) {
+            const contact = await this.device.findContactByPublicKeyPrefix(packet.destination);
+
             let message = new Message(
+                contact.publicKey,
                 packet.payloadType,
                 packet.payload.length,
                 packet.payload
@@ -122,13 +160,15 @@ class Mycelium extends EventEmitter {
         }
     }
 
-    _sendChunkPacket(packet) {
+    async _sendChunkPacket(packet) {
         let session = this.sessions.get(packet.session);
         let chunk = session.chunks.get(packet.chunkIndex);
 
         session.currentChunk = packet.chunkIndex;
 
         let responsePacket = new Packet(
+            packet.source,
+            this.selfInfo.publicKey[0],
             session.id,
             session.totalChunks,
             session.currentChunk,
@@ -137,11 +177,14 @@ class Mycelium extends EventEmitter {
             chunk
         );
 
-        this.device.sendCommandSendRawData([], responsePacket.toUint8Array());
+        const path = await this._resolvePath(new Uint8Array([packet.source]));
+        this.device.sendCommandSendRawData(path, responsePacket.toUint8Array());
     }
 
-    _sendSignallingPacket(packet) {
+    async _sendSignallingPacket(packet) {
         let responsePacket = new Packet(
+            packet.source,
+            this.selfInfo.publicKey[0],
             packet.session,
             0,
             packet.chunkIndex + 1,
@@ -150,10 +193,11 @@ class Mycelium extends EventEmitter {
             []
         );
 
+        const path = await this._resolvePath(new Uint8Array([packet.source]));
         this.device.sendCommandSendRawData([], responsePacket.toUint8Array());
     }
 
-    _handleChunkedPacket(packet) {
+    async _handleChunkedPacket(packet) {
         let session;
 
         // Check if fist packet
@@ -173,7 +217,7 @@ class Mycelium extends EventEmitter {
             session.chunks.set(packet.chunkIndex, packet.payload);
         }
 
-        this.emit(Constants.MessageEvent.MessageProgress, {
+        this.emit(Constants.Events.MessageProgress, {
             session: session,
             totalChunks: packet.totalChunks,
             chunkIndex: packet.chunkIndex
@@ -187,7 +231,10 @@ class Mycelium extends EventEmitter {
 
             let payload = session.getPayload();
 
+            const contact = await this.device.findContactByPublicKeyPrefix(packet.destination);
+
             let message = new Message(
+                contact,
                 packet.payloadType,
                 payload.length,
                 payload
@@ -201,7 +248,7 @@ class Mycelium extends EventEmitter {
         session.retryTimer.startRetryTimer(() => this._sendSignallingPacket(packet), () => {
             this.sessions.delete(packet.session);
 
-            console.error(`Chunked packet transfer in session (${packet.session}) has timed out...`);
+            this.emit(Constants.Events.MessageTimeout, packet.session);
         });
 
         this._sendSignallingPacket(packet)

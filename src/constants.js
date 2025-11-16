@@ -4,6 +4,10 @@ export class Constants {
     static Version = 0x00; // The current version number
 
     static ChunkSize = 128;
+    
+    static Path = {
+        ZeroHop: [0x00],
+    }
 
     static PayloadType = {
         Signalling: 0x00,
@@ -12,7 +16,10 @@ export class Constants {
         Voice: 0x03
     };
 
-    static MessageEvent = {
+    static Events = {
+        Connected: "connected",
+        Disconnected: "Disconnected",
+        MessageTimeout: "messageTimeout",
         MessageProgress: "messageProgress",
         Message: "message",
         File: "file"

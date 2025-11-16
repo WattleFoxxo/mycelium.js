@@ -12,6 +12,8 @@ Mycelium.js runs ontop of Meshcore and gives support for sending and reciving la
 | ----- | ---- | ----------- |
 | Magic | 2 (bytes) | Unique identifier for Mycelium. Always [0x4D, 0x50] aka. "MP" short for "Mycelium Packet" |
 | Version | 1 (Byte) | The Mycelium Protocol Version. (Currently 0x00) |
+| Destination | 1 (Byte) | Prefix of the intended recipient |
+| Source | 1 (Byte) | Prefix of the sender |
 | Session | 1 (Byte) | Unique per chunked transfer |
 | Total Chunks | 1 (Byte) | Total number of chunks in the message |
 | Chunk Index | 1 (Byte) | Index of current chunk |
@@ -19,7 +21,7 @@ Mycelium.js runs ontop of Meshcore and gives support for sending and reciving la
 | Payload Length | 1 (byte) | Size of the payload |
 | Payload | ... | The payload itself |
 
-*8 bytes of overhead*
+*10 byte overhead*
 
 ## Examples
 ### examples/myceliumDemo.js
