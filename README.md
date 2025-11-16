@@ -30,7 +30,7 @@ Allows you to send large messages and files over meshcore and lora
 ## Todo
 - [x] Keep compatibility with non Mycelium clients
 - [x] Protocol header
-- [ ] Meshcore based routing
+- [x] Message addressing
 - [ ] Encryption
 - [x] Chained messages
 - [x] Large messages
