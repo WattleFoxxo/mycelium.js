@@ -56,6 +56,7 @@ mycelium.on(MyceliumConstants.Events.Connected, async () => {
         case "message":
             const [, , , , , message ] = process.argv;
 
+            // You can aso use MyceliumConstants.Path.ZeroHop to message all zero hop neighbours
             mycelium.sendMessage(contact.publicKey, message);
             break;
 
@@ -65,7 +66,7 @@ mycelium.on(MyceliumConstants.Events.Connected, async () => {
             const fileName = path.basename(filePath);
             const file = fs.readFileSync(filePath);
             
-            mycelium.sendFile(MyceliumConstants.Path.ZeroHop, fileName, file);
+            mycelium.sendFile(contact.publicKey, fileName, file);
             break;
         
         default:
