@@ -139,7 +139,13 @@ class Mycelium extends EventEmitter {
         // Filter Mcelium packets that are not for us
         if (packet.destination != this.selfInfo.publicKey[0] && packet.destination != Constants.Path.ZeroHop[0]) return;
         
+        // Catch single packet messages
         if (packet.totalChunks == 1) {
+            if (packet.payloadType == Constants.PayloadType.Signalling) {
+                this._sendChunkPacket(packet);
+                return;
+            }
+
             const contact = await this.device.findContactByPublicKeyPrefix(packet.destination);
 
             let message = new Message(
@@ -150,23 +156,20 @@ class Mycelium extends EventEmitter {
             );
 
             this._onMyceliumMessage(message);
-        } else {
-            if (packet.payloadType == Constants.PayloadType.Signalling) {
-                this._sendChunkPacket(packet);
-                return;
-            }
-
-            this._handleChunkedPacket(packet);
+            return;
         }
+
+        this._handleChunkedPacket(packet);
     }
 
     async _sendChunkPacket(packet) {
-        let session = this.sessions.get(packet.session);
-        let chunk = session.chunks.get(packet.chunkIndex);
+        const chunkIndex = packet.payload[0];
+        const session = this.sessions.get(packet.session);
+        const chunk = session.chunks.get(chunkIndex);
 
-        session.currentChunk = packet.chunkIndex;
+        session.currentChunk = chunkIndex;
 
-        let responsePacket = new Packet(
+        const responsePacket = new Packet(
             packet.source,
             this.selfInfo.publicKey[0],
             session.id,
@@ -186,15 +189,17 @@ class Mycelium extends EventEmitter {
             packet.source,
             this.selfInfo.publicKey[0],
             packet.session,
-            0,
-            packet.chunkIndex + 1,
+            1, // Total chunks
+            0, // Chunk index
             Constants.PayloadType.Signalling,
-            0,
-            []
+            0x00, // Reserved/unused
+            new Uint8Array([
+                packet.chunkIndex + 1 // Get the next chunk
+            ])
         );
 
         const path = await this._resolvePath(new Uint8Array([packet.source]));
-        this.device.sendCommandSendRawData([], responsePacket.toUint8Array());
+        this.device.sendCommandSendRawData(path, responsePacket.toUint8Array());
     }
 
     async _handleChunkedPacket(packet) {
