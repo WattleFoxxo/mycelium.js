@@ -3,7 +3,7 @@ export class Constants {
     static Magic = [0x4d, 0x50]; // Magic aka "MP"
     static Version = 0x00; // The current version number
 
-    static ChunkSize = 128;
+    static ChunkSize = 120;
     
     static Path = {
         ZeroHop: [0x00],

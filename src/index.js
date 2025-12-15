@@ -146,10 +146,8 @@ class Mycelium extends EventEmitter {
                 return;
             }
 
-            const contact = await this.device.findContactByPublicKeyPrefix(packet.destination);
-
             let message = new Message(
-                contact.publicKey,
+                this.selfInfo,
                 packet.payloadType,
                 packet.payload.length,
                 packet.payload
@@ -236,10 +234,8 @@ class Mycelium extends EventEmitter {
 
             let payload = session.getPayload();
 
-            const contact = await this.device.findContactByPublicKeyPrefix(packet.destination);
-
             let message = new Message(
-                contact,
+                this.selfInfo,
                 packet.payloadType,
                 payload.length,
                 payload
